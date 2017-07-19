@@ -1,0 +1,4 @@
+--extra-index-url http://github.com/romana/vpc-router
+
+etcd3==0.6.2
+-e git+git://github.com/romana/vpc-router#egg=vpcrouter
