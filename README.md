@@ -44,15 +44,31 @@ provided with the software. To build your own container, use:
 
     $ docker build -t yourname/vpcrouter-romana-plugin:1.0.1 .
 
+Please note that this contains the vpc-router base installation in addition to
+the vpc-router Romana plugin.
+
 A few command line arguments are set by default in the container, while
 others still need to be specified when you run the container. Specifically,
-the etcd address and port (`-a` and `-p` options) need to be provided.
+the etcd address and port (`-a` and `-p` options) need to be given. If you
+have an etcd installation secured via SSL certificates then you also need to
+provide these three additional parameters, which allow etcd to authenticate
+vpc-router as a client:
 
-For example, to use the configfile mode, run the container with these options,
-which provide a mapping for the directory containing the config file:
+* `--ca_cert`: Filename of the PEM encoded SSL CA certificate.
+* `--priv_key`: Filename of the PEM encoded private key file.
+* `--cert_chain`: Filename of the PEM encoded cert chain file.
+
+For example, to use the romana mode, run the container with these options:
 
     $ docker run quay.io/romana/vpcrouter-romana-plugin \
-                        -a <etcd-ip-address> -p <etcd-port>
+            -v /<host-path-to-certs>:/certs
+            -a <etcd-ip-address> -p <etcd-port>
+            --ca_cert /certs/ca.crt \
+            --priv_key /certs/client.key \
+            --cert_chain /certs/client.crt
+
+If the etcd instance is not secured with certificates then the last three
+options can be omitted.
 
 Note that in the container, vpc-router logs to stdout, which tends to be the
 preferred log destination in containerized environments.
