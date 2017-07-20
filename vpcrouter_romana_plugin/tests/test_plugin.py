@@ -58,8 +58,18 @@ class TestPluginConf(TestPluginBase):
         conf['port'] = 123
         # Fail because of invalid address
         self.assertRaises(ArgsError, Romana.check_arguments, conf)
+        # Succeed with address specified
         conf['addr'] = "localhost"
         Romana.check_arguments(conf)
+        conf['ca_cert'] = "foo-cert"
+        self.assertRaisesRegexp(ArgsError, 'Either set all SSL auth options',
+                                Romana.check_arguments, conf)
+        conf['priv_key'] = "foo-key"
+        self.assertRaisesRegexp(ArgsError, 'Either set all SSL auth options',
+                                Romana.check_arguments, conf)
+        conf['cert_chain'] = "cert-chain"
+        self.assertRaisesRegexp(ArgsError, "Cannot access file 'foo-cert'",
+                                Romana.check_arguments, conf)
 
     def test_run_no_connection(self):
         self.lc.clear()

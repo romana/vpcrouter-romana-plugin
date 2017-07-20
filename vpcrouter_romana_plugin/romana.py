@@ -105,7 +105,10 @@ class Romana(common.WatcherPlugin):
                 logging.debug("Attempting to connect to etcd")
                 self.etcd = etcd3.client(host=self.conf['addr'],
                                          port=int(self.conf['port']),
-                                         timeout=self.etcd_timeout_time)
+                                         timeout=self.etcd_timeout_time,
+                                         ca_cert=self.conf.get('ca_cert'),
+                                         cert_key=self.conf.get('priv_key'),
+                                         cert_cert=self.conf.get('cert_chain'))
 
                 logging.debug("Initial data read")
                 self.load_topology_send_route_spec()
@@ -183,7 +186,19 @@ class Romana(common.WatcherPlugin):
                             default="2379", type=int,
                             help="etcd's port to connect to "
                                  "(only in Romana mode, default: 2379)")
-        return ["addr", "port"]
+        parser.add_argument('--ca_cert', dest="ca_cert", default=None,
+                            help="Filename of PEM encoded SSL CA certificate "
+                                 "(do not set for plain http connection "
+                                 "to etcd)")
+        parser.add_argument('--priv_key', dest="priv_key", default=None,
+                            help="Filename of PEM encoded private key file "
+                                 "(do not set for plain http connection "
+                                 "to etcd)")
+        parser.add_argument('--cert_chain', dest="cert_chain", default=None,
+                            help="Filename of PEM encoded cert chain file "
+                                 "(do not set for plain http connection "
+                                 "to etcd)")
+        return ["addr", "port", "ca_cert", "priv_key", "cert_chain"]
 
     @classmethod
     def check_arguments(cls, conf):
@@ -197,3 +212,21 @@ class Romana(common.WatcherPlugin):
         if not conf['addr'] == "localhost":
             # Check if a proper address was specified
             utils.ip_check(conf['addr'])
+        cert_args = [conf.get('ca_cert'), conf.get('priv_key'),
+                     conf.get('cert_chain')]
+        if any(cert_args):
+            if not all(cert_args):
+                raise ArgsError("Either set all SSL auth options (--ca_cert, "
+                                "--priv_key, --cert_chain), or none of them.")
+            else:
+                # Check that the three specified files are accessible.
+                for fname in cert_args:
+                    try:
+                        with open(fname) as f:
+                            d = f.read()
+                            if not d:
+                                raise ArgsError("No contents in file '%s'" %
+                                                fname)
+                    except Exception as e:
+                        raise ArgsError("Cannot access file '%s': %s" %
+                                        (fname, str(e)))
