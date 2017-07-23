@@ -42,7 +42,7 @@ Quay.io. You can download the latest version:
 If you prefer to build your own container, a [Dockerfile](Dockerfile) has been
 provided with the software. To build your own container, use:
 
-    $ docker build -t yourname/vpcrouter-romana-plugin:1.0.1 .
+    $ docker build -t yourname/vpcrouter-romana-plugin:1.1.0 .
 
 Please note that this contains the vpc-router base installation in addition to
 the vpc-router Romana plugin.

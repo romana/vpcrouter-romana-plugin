@@ -33,7 +33,10 @@ from vpcrouter_romana_plugin.romana import Romana
 
 
 class TestPluginBase(unittest.TestCase):
+    """
+    Base class for our tests, which sets up log capture.
 
+    """
     def setUp(self):
         self.lc = LogCapture()
         self.lc.setLevel(logging.DEBUG)
@@ -45,7 +48,10 @@ class TestPluginBase(unittest.TestCase):
 
 
 class TestPluginConf(TestPluginBase):
+    """
+    Testing config parsing and options.
 
+    """
     def test_conf(self):
         conf = {
             'addr' : "foobar"
@@ -79,7 +85,7 @@ class TestPluginConf(TestPluginBase):
         }
         plugin = Romana(conf, connect_check_time=0.5, etcd_timeout_time=0.5)
         plugin.start()
-        time.sleep(1.5)
+        time.sleep(2.0)
         self.lc.check(
             ('root', 'INFO',
              'Romana watcher plugin: Starting to watch for '
@@ -102,6 +108,10 @@ class TestPluginConf(TestPluginBase):
 
 
 class TestPluginMockEtcd(TestPluginBase):
+    """
+    Testing different topology input configs.
+
+    """
     def setUp(self):
         super(TestPluginMockEtcd, self).setUp()
         self.orig_client = etcd3.client
@@ -113,6 +123,8 @@ class TestPluginMockEtcd(TestPluginBase):
     def test_run_mocked_connection(self):
         self.lc.clear()
 
+        # Mocking the etcd client
+
         class MockClient(object):
 
             def add_watch_callback(self, key, func):
@@ -121,124 +133,276 @@ class TestPluginMockEtcd(TestPluginBase):
             def status(self):
                 return True
 
+            def _set_mock_return_data(self, data):
+                self.data = data
+
             def get(self, key):
-                return ("""
-                    {
-                        "AllocationRevision": 1,
-                        "TopologyRevision": 4,
-                        "address_name_to_ip": {
-                            "x1": "10.0.0.0",
-                            "x2": "10.0.0.4"
-                        },
-                        "networks": {
-                            "net1": {
-                                "blacked_out": [],
-                                "block_mask": 30,
-                                "cidr": "10.0.0.0/8",
-                                "groups": {
-                                    "block_to_host": {
-                                        "0": "ip-192-168-99-10",
-                                        "1": "ip-192-168-99-11"
-                                    },
-                                    "block_to_owner": {
-                                        "0": "tenant1:",
-                                        "1": "tenant1:"
-                                    },
-                                    "blocks": [
-                                        {
-                                            "cidr": "10.0.0.0/30",
-                                            "pool": {
-                                                "OrigMax": 167772163,
-                                                "OrigMin": 167772160,
-                                                "Ranges": [
-                                                    {
-                                                        "Max": 167772163,
-                                                        "Min": 167772161
-                                                    }
-                                                ]
-                                            },
-                                            "revision": 1
-                                        },
-                                        {
-                                            "cidr": "10.0.0.4/30",
-                                            "pool": {
-                                                "OrigMax": 167772167,
-                                                "OrigMin": 167772164,
-                                                "Ranges": [
-                                                    {
-                                                        "Max": 167772167,
-                                                        "Min": 167772165
-                                                    }
-                                                ]
-                                            },
-                                            "revision": 1
-                                        }
-                                    ],
-                                    "cidr": "10.0.0.0/8",
-                                    "groups": null,
-                                    "hosts": [
-                                        {
-                                            "agent_port": 0,
-                                            "ip": "192.168.99.10",
-                                            "name": "ip-192-168-99-10"
-                                        },
-                                        {
-                                            "agent_port": 0,
-                                            "ip": "192.168.99.11",
-                                            "name": "ip-192-168-99-11"
-                                        }
-                                    ],
-                                    "owner_to_block": {
-                                        "tenant1:": [
-                                            0,
-                                            1
-                                        ]
-                                    },
-                                    "reusable_blocks": [],
-                                    "routing": "test"
-                                },
-                                "name": "net1",
-                                "revision": 2
-                            }
-                        },
-                        "tenant_to_network": {
-                            "*": [
-                                "net1"
-                            ]
-                        }
-                    }
-                    """, None)
+                return (self.data, None)
+
+        MOCK_CLIENT = MockClient()
 
         def mock_client_func(*args, **kwargs):
-            return MockClient()
+            return MOCK_CLIENT
 
         etcd3.client = mock_client_func
+
         conf = {
             "port" : 59999,
             "addr" : "localhost"
         }
-        plugin = Romana(conf, connect_check_time=0.5, etcd_timeout_time=0.5)
-        plugin.start()
-        time.sleep(0.5)
-        plugin.stop()
-        self.lc.check(
-            ('root', 'INFO',
-             'Romana watcher plugin: Starting to watch for '
-             'topology updates...'),
-            ('root', 'DEBUG', 'Attempting to connect to etcd'),
-            ('root', 'DEBUG', 'Initial data read'),
-            ('root', 'DEBUG',
-             "Attempting to establish watch on '/romana/ipam/data'"),
-            ('root', 'INFO',
-             'Romana watcher plugin: Established etcd connection and '
-             'watch for topology data'),
-            ('root', 'DEBUG',
-             'Sending stop signal to etcd watcher thread'),
-            ('root', 'WARNING',
-             'Romana watcher plugin: Lost etcd connection.'),
-            ('root', 'INFO', 'Romana watcher plugin: Stopped'))
+        for test_input, expected_route_spec in [
+                # Topology definition for simple, flat route spec
+                ("""
+                    {
+                        "networks": {
+                            "net1": {
+                                "cidr": "10.0.0.0/8",
+                                "groups": {
+                                    "cidr": "10.0.0.0/8",
+                                    "groups": null,
+                                    "hosts": [
+                                        { "ip": "192.168.99.10" },
+                                        { "ip": "192.168.99.11" }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                 """,
+                 {'10.0.0.0/8': ['192.168.99.10', '192.168.99.11']}),
 
-        q = plugin.get_route_spec_queue()
-        d = q.get()
-        self.assertEqual(d, {'10.0.0.0/8': ['192.168.99.10', '192.168.99.11']})
-        time.sleep(0.5)
+                # Topology definition for simple, flat route spec, two nets
+                ("""
+                    {
+                        "networks": {
+                            "net1": {
+                                "cidr": "10.0.0.0/8",
+                                "groups": {
+                                    "cidr": "10.0.0.0/8",
+                                    "groups": null,
+                                    "hosts": [
+                                        { "ip": "192.168.99.10" },
+                                        { "ip": "192.168.99.11" }
+                                    ]
+                                }
+                            },
+                            "net2": {
+                                "cidr": "11.0.0.0/8",
+                                "groups": {
+                                    "cidr": "11.0.0.0/8",
+                                    "groups": null,
+                                    "hosts": [
+                                        { "ip": "192.168.88.10" },
+                                        { "ip": "192.168.88.11" }
+                                    ]
+                                }
+                            }
+                        }
+                     }
+                 """,
+                 {'10.0.0.0/8': ['192.168.99.10', '192.168.99.11'],
+                  '11.0.0.0/8': ['192.168.88.10', '192.168.88.11']}),
+
+                # Topology definition without hosts (cannot make route spec)
+                ("""
+                   {
+                       "networks": {
+                           "net1": {
+                               "cidr": "10.0.0.0/8",
+                               "groups": {
+                                   "cidr": "10.0.0.0/8",
+                                   "groups": null,
+                                   "hosts": [
+                                   ]
+                               }
+                           }
+                       }
+                   }
+                 """,
+                 {}),
+
+                # Topology definition without CIDR (cannot make route spec)
+                ("""
+                   {
+                       "networks": {
+                           "net1": {
+                               "cidr": "10.0.0.0/8",
+                               "groups": {
+                                   "groups": null,
+                                   "hosts": [
+                                       { "ip": "192.168.99.10" },
+                                       { "ip": "192.168.99.11" }
+                                   ]
+                               }
+                           }
+                       }
+                   }
+                 """,
+                 {}),
+
+                # Topology definition without groups (cannot make route spec)
+                ("""
+                   {
+                       "networks": {
+                           "net1": {
+                               "cidr": "10.0.0.0/8",
+                               "groups": {
+                               }
+                           }
+                       }
+                   }
+                 """,
+                 {}),
+
+                # Several top-level groups
+                ("""
+                   {
+                       "networks": {
+                         "vlanA": {
+                           "name": "vlanA",
+                           "cidr": "10.1.0.0/16",
+                           "groups": {
+                             "routing": "",
+                             "hosts": null,
+                             "groups": [
+                               {
+                                 "routing": "prefix-on-host",
+                                 "hosts": [
+                                   { "ip": "1.1.1.1" },
+                                   { "ip": "1.1.1.2" },
+                                   { "ip": "1.1.1.3" }
+                                 ],
+                                 "groups": null,
+                                 "cidr": "10.1.0.0/28"
+                               },
+                               {
+                                 "routing": "prefix-on-host",
+                                 "hosts": [
+                                   { "ip": "2.2.2.2" }
+                                 ],
+                                 "groups": null,
+                                 "cidr": "10.1.0.16/28"
+                               },
+                               {
+                                 "routing": "prefix-on-host",
+                                 "hosts": [
+                                   { "ip": "3.3.3.3" }
+                                 ],
+                                 "groups": null,
+                                 "cidr": "10.1.0.32/28"
+                               },
+                               {
+                                 "routing": "prefix-on-host",
+                                 "hosts": [
+                                   { "ip": "4.4.4.4" }
+                                 ],
+                                 "groups": null,
+                                 "cidr": "10.1.0.48/28"
+                               }
+                             ]
+                           }
+                         }
+                      }
+                   }
+                 """,
+                 {'10.1.0.32/28': ['3.3.3.3'],
+                  '10.1.0.48/28': ['4.4.4.4'],
+                  '10.1.0.0/28':  ['1.1.1.1', '1.1.1.2', '1.1.1.3'],
+                  '10.1.0.16/28': ['2.2.2.2']}),
+
+                # Deeper nesting of groups
+                ("""
+                   {
+                       "networks": {
+                         "vlanA": {
+                           "name": "vlanA",
+                           "cidr": "10.1.0.0/16",
+                           "groups": {
+                             "routing": "",
+                             "hosts": null,
+                             "groups": [
+                               {
+                                 "routing": "prefix-on-host",
+                                 "hosts": [
+                                   { "ip": "1.1.1.1" },
+                                   { "ip": "1.1.1.2" },
+                                   { "ip": "1.1.1.3" }
+                                 ],
+                                 "cidr": "10.1.0.0/28",
+                                 "groups": [
+                                    {
+                                      "routing": "prefix-on-host",
+                                      "hosts": [
+                                        { "ip": "2.1.1.1" },
+                                        { "ip": "2.1.1.2" },
+                                        { "ip": "2.1.1.3" }
+                                      ],
+                                      "groups": null,
+                                      "cidr": "10.1.0.4/29"
+                                    }
+                                 ]
+                               },
+                               {
+                                 "routing": "prefix-on-host",
+                                 "hosts": [
+                                   { "ip": "2.2.2.2" }
+                                 ],
+                                 "groups": null,
+                                 "cidr": "10.1.0.16/28"
+                               },
+                               {
+                                 "routing": "prefix-on-host",
+                                 "hosts": [
+                                   { "ip": "3.3.3.3" }
+                                 ],
+                                 "groups": null,
+                                 "cidr": "10.1.0.32/28"
+                               },
+                               {
+                                 "routing": "prefix-on-host",
+                                 "hosts": [
+                                   { "ip": "4.4.4.4" }
+                                 ],
+                                 "groups": null,
+                                 "cidr": "10.1.0.48/28"
+                               }
+                             ]
+                           }
+                         }
+                      }
+                   }
+                 """,
+                 {'10.1.0.32/28': ['3.3.3.3'],
+                  '10.1.0.48/28': ['4.4.4.4'],
+                  '10.1.0.0/28':  ['1.1.1.1', '1.1.1.2', '1.1.1.3'],
+                  '10.1.0.4/29':  ['2.1.1.1', '2.1.1.2', '2.1.1.3'],
+                  '10.1.0.16/28': ['2.2.2.2']})]:
+
+            MOCK_CLIENT._set_mock_return_data(test_input)
+            plugin = Romana(conf, connect_check_time=0.5,
+                            etcd_timeout_time=0.5)
+            plugin.start()
+            time.sleep(0.5)
+            plugin.stop()
+            self.lc.check(
+                ('root', 'INFO',
+                 'Romana watcher plugin: Starting to watch for '
+                 'topology updates...'),
+                ('root', 'DEBUG', 'Attempting to connect to etcd'),
+                ('root', 'DEBUG', 'Initial data read'),
+                ('root', 'DEBUG',
+                 "Attempting to establish watch on '/romana/ipam/data'"),
+                ('root', 'INFO',
+                 'Romana watcher plugin: Established etcd connection and '
+                 'watch for topology data'),
+                ('root', 'DEBUG',
+                 'Sending stop signal to etcd watcher thread'),
+                ('root', 'WARNING',
+                 'Romana watcher plugin: Lost etcd connection.'),
+                ('root', 'INFO', 'Romana watcher plugin: Stopped'))
+            self.lc.clear()
+
+            q = plugin.get_route_spec_queue()
+            is_route_spec = q.get()
+            self.assertEqual(is_route_spec, expected_route_spec)
+            time.sleep(0.5)
