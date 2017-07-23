@@ -50,15 +50,49 @@ class Romana(common.WatcherPlugin):
         Retrieve latest topology info from Romana topology store and send
         new spec.
 
+        The topology information may contain recursive definitions of groups.
+        Those need to be traversed and the host information for each group
+        collected.
+
+        * A group may either have another group (child group) or a list of
+          hosts.
+        * A group always has a CIDR.
+
         """
+        def _parse_one_group(elem, route_spec):
+            # Recursive helper function to descend into the nested group
+            # definitions and append to the route-spec any more CIDRs and host
+            # lists that we may find.
+            # At any given level, we may have more groups, hosts or both. We
+            # should have a CIDR as well, especially if we have hosts.
+            groups = elem.get("groups")
+            hosts  = elem.get("hosts")
+            cidr   = elem.get("cidr")
+            if groups and type(groups) is list:
+                for group in groups:
+                    # Call one level deeper for every group we find
+                    route_spec = _parse_one_group(group, route_spec)
+            if cidr and hosts and type(hosts) is list:
+                # Use the hosts and cidr to add an entry to the route spec
+                host_ips = [h['ip'] for h in hosts]
+                route_spec[cidr] = host_ips
+            return route_spec
+
+        # Get the topology data from etcd and parse it
         try:
             d = json.loads(self.etcd.get(self.key)[0])
             route_spec = {}
+            # We have separate topology data for different networks
             for net_name, net_data in d['networks'].items():
-                cidr  = net_data['groups']['cidr']
-                hosts = [h['ip'] for h in net_data['groups']['hosts']]
-                route_spec[cidr] = hosts
+                # Top level element is always 'groups' (not a list), while
+                # further down 'groups' will be a list of groups.
+                groups = net_data.get('groups')
+                if groups and type(groups) is dict:
+                    route_spec = _parse_one_group(net_data['groups'],
+                                                  route_spec)
+            # Sanity checking on the assembled route spec
             common.parse_route_spec_config(route_spec)
+            # Sending the new route spec out on our message queue
             self.q_route_spec.put(route_spec)
 
         except Exception as e:
@@ -145,6 +179,7 @@ class Romana(common.WatcherPlugin):
                 time.sleep(self.connect_check_time)
 
             logging.warning("Romana watcher plugin: Lost etcd connection.")
+            time.sleep(self.connect_check_time)
 
     def start(self):
         """
