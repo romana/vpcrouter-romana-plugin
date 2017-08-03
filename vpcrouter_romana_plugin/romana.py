@@ -208,7 +208,7 @@ class Romana(common.WatcherPlugin):
         logging.info("Romana watcher plugin: Stopped")
 
     @classmethod
-    def add_arguments(cls, parser):
+    def add_arguments(cls, parser, sys_arg_list=None):
         """
         Add arguments for the Romana mode to the argument parser.
 
