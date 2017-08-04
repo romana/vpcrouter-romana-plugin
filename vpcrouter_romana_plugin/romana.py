@@ -44,9 +44,8 @@ class Romana(common.WatcherPlugin):
         self.keep_running       = True
         self.etcd               = None
 
-        self.watch_id                     = None  # used for etcd APIv3
-        self.watch_thread_v2              = None  # used for etcd APIv2
-        self.watch_thread_v2_keep_running = True  # used for etcd APIv2
+        self.watch_id           = None  # used for etcd APIv3
+        self.watch_thread_v2    = None  # used for etcd APIv2
 
         super(Romana, self).__init__(*args, **kwargs)
 
@@ -68,8 +67,8 @@ class Romana(common.WatcherPlugin):
         if self.watch_thread_v2:
             logging.debug("Stop watch thread for etcd APIv2 on '%s'" %
                           self.key)
-            self.watch_thread_v2_keep_running = False
-            self.watch_thread_v2.join()
+            # I'm not really stopping this thread, because that thread sits in
+            # a block watch statement. TODO
             self.watch_thread_v2 = None
 
     def load_topology_send_route_spec(self):
@@ -203,7 +202,7 @@ class Romana(common.WatcherPlugin):
         """
         self.stop_watches()    # just in case this is a re-establishment
         if not self.etcd or not self.etcd_check_status() or \
-                                                self.watch_id is None:
+                    (self.watch_id is None and self.watch_thread_v2 is None):
             try:
                 if self.v2:
                     logging.debug("Attempting to connect to etcd (APIv2)")
@@ -228,7 +227,6 @@ class Romana(common.WatcherPlugin):
                 logging.debug("Attempting to establish watch on '%s'" %
                               self.key)
                 if self.v2:
-                    self.watch_thread_v2_keep_running = True
                     self.watch_thread_v2 = threading.Thread(
                                                 target = self.watch_loop_v2,
                                                 name   = "RomanaMonV2",
