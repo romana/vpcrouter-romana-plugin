@@ -62,7 +62,7 @@ class TestPluginConf(TestPluginBase):
         # Fail because of invalid port
         self.assertRaises(ArgsError, Romana.check_arguments, conf)
         conf['port'] = 123
-        # Fail because of invalid address
+        # Fail because of missing address
         self.assertRaises(ArgsError, Romana.check_arguments, conf)
         # Succeed with address specified
         conf['addr'] = "localhost"
@@ -90,7 +90,7 @@ class TestPluginConf(TestPluginBase):
             ('root', 'INFO',
              'Romana watcher plugin: Starting to watch for '
              'topology updates...'),
-            ('root', 'DEBUG', 'Attempting to connect to etcd'),
+            ('root', 'DEBUG', 'Attempting to connect to etcd (APIv3)'),
             ('root', 'DEBUG', 'Initial data read'),
             ('root', 'ERROR',
              "Cannot load Romana topology data at '/romana/ipam/data': "),
@@ -100,7 +100,7 @@ class TestPluginConf(TestPluginBase):
             ('root', 'DEBUG', 'Cannot get status from etcd, no connection'),
             ('root', 'WARNING',
              'Romana watcher plugin: Lost etcd connection.'),
-            ('root', 'DEBUG', 'Attempting to connect to etcd'),
+            ('root', 'DEBUG', 'Attempting to connect to etcd (APIv3)'),
             ('root', 'DEBUG', 'Initial data read'))
 
         plugin.stop()
@@ -157,7 +157,7 @@ class TestPluginMockEtcd(TestPluginBase):
                         "networks": {
                             "net1": {
                                 "cidr": "10.0.0.0/8",
-                                "groups": {
+                                "host_groups": {
                                     "cidr": "10.0.0.0/8",
                                     "groups": null,
                                     "hosts": [
@@ -177,7 +177,7 @@ class TestPluginMockEtcd(TestPluginBase):
                         "networks": {
                             "net1": {
                                 "cidr": "10.0.0.0/8",
-                                "groups": {
+                                "host_groups": {
                                     "cidr": "10.0.0.0/8",
                                     "groups": null,
                                     "hosts": [
@@ -188,7 +188,7 @@ class TestPluginMockEtcd(TestPluginBase):
                             },
                             "net2": {
                                 "cidr": "11.0.0.0/8",
-                                "groups": {
+                                "host_groups": {
                                     "cidr": "11.0.0.0/8",
                                     "groups": null,
                                     "hosts": [
@@ -209,7 +209,7 @@ class TestPluginMockEtcd(TestPluginBase):
                        "networks": {
                            "net1": {
                                "cidr": "10.0.0.0/8",
-                               "groups": {
+                               "host_groups": {
                                    "cidr": "10.0.0.0/8",
                                    "groups": null,
                                    "hosts": [
@@ -227,7 +227,7 @@ class TestPluginMockEtcd(TestPluginBase):
                        "networks": {
                            "net1": {
                                "cidr": "10.0.0.0/8",
-                               "groups": {
+                               "host_groups": {
                                    "groups": null,
                                    "hosts": [
                                        { "ip": "192.168.99.10" },
@@ -246,7 +246,7 @@ class TestPluginMockEtcd(TestPluginBase):
                        "networks": {
                            "net1": {
                                "cidr": "10.0.0.0/8",
-                               "groups": {
+                               "host_groups": {
                                }
                            }
                        }
@@ -261,7 +261,7 @@ class TestPluginMockEtcd(TestPluginBase):
                          "vlanA": {
                            "name": "vlanA",
                            "cidr": "10.1.0.0/16",
-                           "groups": {
+                           "host_groups": {
                              "routing": "",
                              "hosts": null,
                              "groups": [
@@ -317,7 +317,7 @@ class TestPluginMockEtcd(TestPluginBase):
                          "vlanA": {
                            "name": "vlanA",
                            "cidr": "10.1.0.0/16",
-                           "groups": {
+                           "host_groups": {
                              "routing": "",
                              "hosts": null,
                              "groups": [
@@ -388,8 +388,11 @@ class TestPluginMockEtcd(TestPluginBase):
                 ('root', 'INFO',
                  'Romana watcher plugin: Starting to watch for '
                  'topology updates...'),
-                ('root', 'DEBUG', 'Attempting to connect to etcd'),
+                ('root', 'DEBUG', 'Attempting to connect to etcd (APIv3)'),
                 ('root', 'DEBUG', 'Initial data read'),
+                ('root', 'DEBUG',
+                 "Sending route spec for routes: %s" %
+                 [unicode(i) for i in expected_route_spec.keys()]),
                 ('root', 'DEBUG',
                  "Attempting to establish watch on '/romana/ipam/data'"),
                 ('root', 'INFO',

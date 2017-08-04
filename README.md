@@ -28,17 +28,17 @@ the vpc-router Romana plugin.
 
 ### Command line options
 
-* `-m vpcrouter_romana_plugin.romana`: Select the Romana plugin.
-* `-a <etcd-IP-address>`: Specify the IP address of the Romana etcd instance.
-* `-p <etcd-port>`: Specify the port of the Romana etcd instance.
 * `-l <logfile|->`: Specify the name of the logfile, or '-' to log to stdout.
+* `-m vpcrouter_romana_plugin.romana`: Select the Romana plugin.
+* `--etcd_addr <etcd-IP-address>`: Specify the IP address of the Romana etcd instance.
+* `--etcd_port <etcd-port>`: Specify the port of the Romana etcd instance.
 
 The following options are only needed if the etcd instance is secured with SSL
 certificates:
 
-* `--ca_cert`: Filename of the PEM encoded SSL CA certificate.
-* `--priv_key`: Filename of the PEM encoded private key file.
-* `--cert_chain`: Filename of the PEM encoded cert chain file.
+* `--etcd_ca_cert`: Filename of the PEM encoded SSL CA certificate.
+* `--etcd_priv_key`: Filename of the PEM encoded private key file.
+* `--etcd_cert_chain`: Filename of the PEM encoded cert chain file.
 
 A few command line arguments are set by default if you run the provided
 container, while others still need to be specified.
@@ -49,16 +49,16 @@ For example, run the container with these options:
 
     $ docker run -v /<host-path-to-certs>:/certs \
         quay.io/romana/vpcrouter-romana-plugin \
-            -a <etcd-ip-address> -p <etcd-port>
-            --ca_cert /certs/ca.crt \
-            --priv_key /certs/client.key \
-            --cert_chain /certs/client.crt
+            --etcd_addr <etcd-ip-address> --etcd_port <etcd-port>
+            --etcd_ca_cert /certs/ca.crt \
+            --etcd_priv_key /certs/client.key \
+            --etcd_cert_chain /certs/client.crt
 
 If the etcd instance is not secured with certificates then the last three
 options and the `-v` option can be omitted:
 
     $ docker run quay.io/romana/vpcrouter-romana-plugin \
-            -a <etcd-ip-address> -p <etcd-port>
+            --etcd_addr <etcd-ip-address> --etcd_port <etcd-port>
 
 Note that in the container, vpc-router logs to stdout, which tends to be the
 preferred log destination in containerized environments.
@@ -68,10 +68,10 @@ outside of the container (and also logging to stdout):
 
     $ vpcrouter -m vpcrouter_romana_plugin.romana \
             -l - \
-            -a <etcd-ip-address> -p <etcd-port>
-            --ca_cert /certs/ca.crt \
-            --priv_key /certs/client.key \
-            --cert_chain /certs/client.crt
+            --etcd_addr <etcd-ip-address> --etcd_port <etcd-port>
+            --etcd_ca_cert /certs/ca.crt \
+            --etcd_priv_key /certs/client.key \
+            --etcd_cert_chain /certs/client.crt
 
 
 ## Contributing, development and testing

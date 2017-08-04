@@ -20,7 +20,8 @@ limitations under the License.
 # maintained by Romana 2.0 in etcd.
 #
 
-import etcd3
+import etcd      # etcd APIv2 support
+import etcd3     # etcd APIv3 support
 import json
 import logging
 import threading
@@ -38,12 +39,37 @@ class Romana(common.WatcherPlugin):
     """
     def __init__(self, *args, **kwargs):
         self.key                = "/romana/ipam/data"
-        self.connect_check_time = kwargs.pop('connect_check_time', 2)
+        self.connect_check_time = kwargs.pop('connect_check_time', 5)
         self.etcd_timeout_time  = kwargs.pop('etcd_timeout_time', 2)
         self.keep_running       = True
-        self.watch_id           = None
         self.etcd               = None
+
+        self.watch_id           = None  # used for etcd APIv3
+        self.watch_thread_v2    = None  # used for etcd APIv2
+
         super(Romana, self).__init__(*args, **kwargs)
+
+        if self.conf.get('usev2'):
+            self.v2 = True
+        else:
+            self.v2 = False
+
+    def stop_watches(self):
+        """
+        Depending on which watches was configured (callback for v3 or thread
+        for v2, issues necessary instructions to stop those.
+
+        """
+        if self.watch_id:
+            logging.debug("Cancel watch for etcd APIv3 on '%s'" % self.key)
+            self.etcd.cancel_watch(self.watch_id)
+            self.watch_id = None
+        if self.watch_thread_v2:
+            logging.debug("Stop watch thread for etcd APIv2 on '%s'" %
+                          self.key)
+            # I'm not really stopping this thread, because that thread sits in
+            # a block watch statement. TODO
+            self.watch_thread_v2 = None
 
     def load_topology_send_route_spec(self):
         """
@@ -80,35 +106,70 @@ class Romana(common.WatcherPlugin):
 
         # Get the topology data from etcd and parse it
         try:
-            d = json.loads(self.etcd.get(self.key)[0])
+            if self.v2:
+                data = self.etcd.get(self.key).value
+            else:
+                data = self.etcd.get(self.key)[0]
+            d = json.loads(data)
             route_spec = {}
             # We have separate topology data for different networks
             for net_name, net_data in d['networks'].items():
                 # Top level element is always 'groups' (not a list), while
                 # further down 'groups' will be a list of groups.
-                groups = net_data.get('groups')
+                groups = net_data.get('host_groups')
                 if groups and type(groups) is dict:
-                    route_spec = _parse_one_group(net_data['groups'],
-                                                  route_spec)
+                    route_spec = _parse_one_group(groups, route_spec)
             # Sanity checking on the assembled route spec
             common.parse_route_spec_config(route_spec)
             # Sending the new route spec out on our message queue
+            logging.debug("Sending route spec for routes: %s" %
+                          route_spec.keys())
             self.q_route_spec.put(route_spec)
 
         except Exception as e:
             logging.error("Cannot load Romana topology data at '%s': %s" %
                           (self.key, str(e)))
 
-    def event_callback(self, event):
+    def event_callback_v3(self, event):
         """
         Event handler function for watch on Romana IPAM data.
 
-        This is called whenever there is an update to that data detected.
+        This is called when we use the APIv3 client and whenever there is an
+        update to that data detected.
 
         """
         logging.info("Romana watcher plugin: Detected topology change in "
                      "Romana topology data")
         self.load_topology_send_route_spec()
+
+    def watch_loop_v2(self):
+        """
+        Establishes a watch for changes on the Romana IPAM data.
+
+        This is called when we use the APIv2 client and runs in an extra
+        thread.
+
+        """
+        # By the time we get here, an update may have happened. So, get the
+        # latest index from the latest result and start our watch there,
+        # setting the value so that the first watch immediately returns and we
+        # can send a route spec update.
+        res        = self.etcd.get(self.key)
+        next_index = res.etcd_index   # First watch immediately finds this
+
+        while True:
+            try:
+                watch_res = self.etcd.watch(self.key,
+                                            timeout=0,
+                                            index=next_index)
+                if watch_res:
+                    next_index = watch_res.etcd_index + 1
+                self.load_topology_send_route_spec()
+
+            except:
+                # Something wrong? We'll attempt to re-establish the watch
+                # after a little wait.
+                time.sleep(2)
 
     def etcd_check_status(self):
         """
@@ -119,10 +180,16 @@ class Romana(common.WatcherPlugin):
         """
         if self.etcd:
             try:
-                self.etcd.status()
+                if self.v2:
+                    res = self.etcd.get("/")
+                    if res is None:
+                        raise Exception("empty status result from etcd")
+                else:
+                    self.etcd.status()
                 return True
             except Exception as e:
                 logging.debug("Cannot get status from etcd: %s" % str(e))
+
         else:
             logging.debug("Cannot get status from etcd, no connection")
 
@@ -133,24 +200,44 @@ class Romana(common.WatcherPlugin):
         Get connection to ectd and install a watch for Romana topology data.
 
         """
+        self.stop_watches()    # just in case this is a re-establishment
         if not self.etcd or not self.etcd_check_status() or \
-                                                self.watch_id is None:
+                    (self.watch_id is None and self.watch_thread_v2 is None):
             try:
-                logging.debug("Attempting to connect to etcd")
-                self.etcd = etcd3.client(host=self.conf['addr'],
-                                         port=int(self.conf['port']),
-                                         timeout=self.etcd_timeout_time,
-                                         ca_cert=self.conf.get('ca_cert'),
-                                         cert_key=self.conf.get('priv_key'),
-                                         cert_cert=self.conf.get('cert_chain'))
+                if self.v2:
+                    logging.debug("Attempting to connect to etcd (APIv2)")
+                    self.etcd = etcd.client.Client(
+                                        host=self.conf['addr'],
+                                        port=int(self.conf['port']),
+                                        read_timeout=self.etcd_timeout_time)
+
+                else:
+                    logging.debug("Attempting to connect to etcd (APIv3)")
+                    self.etcd = etcd3.client(
+                                        host=self.conf['addr'],
+                                        port=int(self.conf['port']),
+                                        timeout=self.etcd_timeout_time,
+                                        ca_cert=self.conf.get('ca_cert'),
+                                        cert_key=self.conf.get('priv_key'),
+                                        cert_cert=self.conf.get('cert_chain'))
 
                 logging.debug("Initial data read")
                 self.load_topology_send_route_spec()
 
                 logging.debug("Attempting to establish watch on '%s'" %
                               self.key)
-                self.watch_id = self.etcd.add_watch_callback(
-                                        self.key, self.event_callback)
+                if self.v2:
+                    self.watch_thread_v2 = threading.Thread(
+                                                target = self.watch_loop_v2,
+                                                name   = "RomanaMonV2",
+                                                kwargs = {})
+                    self.watch_thread_v2.daemon = True
+                    self.watch_thread_v2.start()
+                    self.watch_id = None
+                else:
+                    self.watch_id = self.etcd.add_watch_callback(
+                                            self.key, self.event_callback_v3)
+                    self.watch_thread_v2 = None
 
                 logging.info("Romana watcher plugin: Established etcd "
                              "connection and watch for topology data")
@@ -169,8 +256,7 @@ class Romana(common.WatcherPlugin):
 
         """
         while self.keep_running:
-            self.etcd     = None
-            self.watch_id = None
+            self.etcd = None
 
             self.establish_etcd_connection_and_watch()
 
@@ -200,8 +286,7 @@ class Romana(common.WatcherPlugin):
         Stop the config change monitoring thread.
 
         """
-        if self.watch_id:
-            self.etcd.cancel_watch(self.watch_id)
+        # self.stop_watches()
         logging.debug("Sending stop signal to etcd watcher thread")
         self.keep_running = False
         self.observer_thread.join()
@@ -213,27 +298,31 @@ class Romana(common.WatcherPlugin):
         Add arguments for the Romana mode to the argument parser.
 
         """
-        parser.add_argument('-a', '--address', dest="addr",
+        parser.add_argument('--etcd_addr', dest="addr",
                             default="localhost",
                             help="etcd's address to connect to "
                                  "(only in Romana mode, default: localhost)")
-        parser.add_argument('-p', '--port', dest="port",
+        parser.add_argument('--etcd_port', dest="port",
                             default="2379", type=int,
                             help="etcd's port to connect to "
                                  "(only in Romana mode, default: 2379)")
-        parser.add_argument('--ca_cert', dest="ca_cert", default=None,
+        parser.add_argument('--etcd_use_v2', dest="usev2", action='store_true',
+                            help="use etcd APIv2 (only in Romana mode)")
+        parser.add_argument('--etcd_ca_cert', dest="ca_cert", default=None,
                             help="Filename of PEM encoded SSL CA certificate "
                                  "(do not set for plain http connection "
                                  "to etcd)")
-        parser.add_argument('--priv_key', dest="priv_key", default=None,
+        parser.add_argument('--etcd_priv_key', dest="priv_key", default=None,
                             help="Filename of PEM encoded private key file "
                                  "(do not set for plain http connection "
                                  "to etcd)")
-        parser.add_argument('--cert_chain', dest="cert_chain", default=None,
+        parser.add_argument('--etcd_cert_chain', dest="cert_chain",
+                            default=None,
                             help="Filename of PEM encoded cert chain file "
                                  "(do not set for plain http connection "
                                  "to etcd)")
-        return ["addr", "port", "ca_cert", "priv_key", "cert_chain"]
+        return ["addr", "port", "usev2",
+                "ca_cert", "priv_key", "cert_chain"]
 
     @classmethod
     def check_arguments(cls, conf):
@@ -251,8 +340,9 @@ class Romana(common.WatcherPlugin):
                      conf.get('cert_chain')]
         if any(cert_args):
             if not all(cert_args):
-                raise ArgsError("Either set all SSL auth options (--ca_cert, "
-                                "--priv_key, --cert_chain), or none of them.")
+                raise ArgsError("Either set all SSL auth options "
+                                "(--etcd_ca_cert, --etcd_priv_key, "
+                                "--etcd_cert_chain), or none of them.")
             else:
                 # Check that the three specified files are accessible.
                 for fname in cert_args:
