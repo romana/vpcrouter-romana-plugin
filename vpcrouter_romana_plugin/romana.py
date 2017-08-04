@@ -333,9 +333,6 @@ class Romana(common.WatcherPlugin):
         if not 0 < conf['port'] < 65535:
             raise ArgsError("Invalid etcd port '%d' for Romana mode." %
                             conf['port'])
-        if not conf['addr'] == "localhost":
-            # Check if a proper address was specified
-            utils.ip_check(conf['addr'])
         cert_args = [conf.get('ca_cert'), conf.get('priv_key'),
                      conf.get('cert_chain')]
         if any(cert_args):
