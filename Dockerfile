@@ -4,6 +4,7 @@ ADD . /code
 WORKDIR /code
 RUN apt-get update && apt-get -y upgrade && \
     apt-get install -y wget g++ libc-dev python-dev python-setuptools && \
+    apt-get install -y netbase && \
     apt-mark manual python-minimal python-pkg-resources python2.7 python2.7-minimal && \
     python setup.py install && \
     apt-get purge -y wget g++ libc-dev python-dev python-setuptools && \
