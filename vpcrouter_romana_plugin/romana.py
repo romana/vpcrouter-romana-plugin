@@ -27,7 +27,6 @@ import logging
 import threading
 import time
 
-from vpcrouter         import utils
 from vpcrouter.errors  import ArgsError
 from vpcrouter.watcher import common
 
