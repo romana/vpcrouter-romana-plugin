@@ -54,18 +54,16 @@ class TestPluginConf(TestPluginBase):
     """
     def test_conf(self):
         conf = {
-            'addr' : "foobar"
         }
         # Fail because of missing port
-        self.assertRaises(KeyError, Romana.check_arguments, conf)
+        self.assertRaises(ArgsError, Romana.check_arguments, conf)
         conf['port'] = 0
+        # Fail because of missing address
+        self.assertRaises(ArgsError, Romana.check_arguments, conf)
+        conf['addr'] = "localhost"
         # Fail because of invalid port
         self.assertRaises(ArgsError, Romana.check_arguments, conf)
         conf['port'] = 123
-        # Fail because of missing address
-        self.assertRaises(ArgsError, Romana.check_arguments, conf)
-        # Succeed with address specified
-        conf['addr'] = "localhost"
         Romana.check_arguments(conf)
         conf['ca_cert'] = "foo-cert"
         self.assertRaisesRegexp(ArgsError, 'Either set all SSL auth options',

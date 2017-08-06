@@ -330,6 +330,12 @@ class Romana(common.WatcherPlugin):
         Sanity check options needed for Romana mode.
 
         """
+        if 'port' not in conf:
+            raise ArgsError("The etcd port needs to be specified "
+                            "(--etcd_port parameter)")
+        if 'addr' not in conf:
+            raise ArgsError("The etcd address needs to be specified "
+                            "(--etcd_addr parameter)")
         if not 0 < conf['port'] < 65535:
             raise ArgsError("Invalid etcd port '%d' for Romana mode." %
                             conf['port'])
