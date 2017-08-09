@@ -153,10 +153,23 @@ class Romana(common.WatcherPlugin):
         # latest index from the latest result and start our watch there,
         # setting the value so that the first watch immediately returns and we
         # can send a route spec update.
-        res        = self.etcd.get(self.key)
+        try:
+            res = self.etcd.get(self.key)
+        except Exception as e:
+            logging.warning("Romana watcher plugin: Cannot read data at "
+                            "start of watch loop: %s" % str(e))
+            # It seems the connection we have doesn't work. So we exit this
+            # thread. The failed connection will be detected higher up and
+            # therefore, this thread will be restarted automatically. We are
+            # also deleting the etcd client reference. This will be detected
+            # immediately by the loop who started this thread.
+            self.etcd = None
+            return
+
         next_index = res.etcd_index   # First watch immediately finds this
 
-        while True:
+        fail_counter = 0
+        while fail_counter < 5:
             try:
                 watch_res = self.etcd.watch(self.key,
                                             timeout=0,
@@ -165,10 +178,22 @@ class Romana(common.WatcherPlugin):
                     next_index = watch_res.etcd_index + 1
                 self.load_topology_send_route_spec()
 
-            except:
+                fail_counter = 0
+            except Exception as e:
                 # Something wrong? We'll attempt to re-establish the watch
-                # after a little wait.
+                # after a little wait. The wrong-counter ensures we won't try
+                # forever
                 time.sleep(2)
+                fail_counter += 1
+                logging.debug("Attempting %d to re-establish failed watch: "
+                              "%s" % (fail_counter, str(e)))
+
+        # When the loop exists the thread ends. We signal this by deleting the
+        # etcd client.
+        self.etcd = None
+
+        logging.warning("Romana watcher plugin: Repeated attempts to "
+                        "re-start the watch have failed.")
 
     def etcd_check_status(self):
         """
