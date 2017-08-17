@@ -51,10 +51,10 @@ setup(
     install_requires     = [
         'etcd3==0.6.2',
         'python-etcd==0.4.5',
-        'vpcrouter==1.4.2'
+        'vpcrouter==1.5.1'
     ],
-    dependency_links=[
-        "http://github.com/romana/vpc-router/tarball/master#egg=vpcrouter-1.4.2"
+    dependency_links     = [
+        "https://github.com/romana/vpc-router/tarball/master#egg=vpcrouter-1.5.1"
     ],
     classifiers          = [
         'Programming Language :: Python',
