@@ -20,6 +20,7 @@ limitations under the License.
 # maintained by Romana 2.0 in etcd.
 #
 
+import datetime
 import etcd      # etcd APIv2 support
 import etcd3     # etcd APIv3 support
 import json
@@ -30,6 +31,8 @@ import time
 from vpcrouter.errors  import ArgsError
 from vpcrouter.watcher import common
 
+from . import __version__
+
 
 class Romana(common.WatcherPlugin):
     """
@@ -37,14 +40,17 @@ class Romana(common.WatcherPlugin):
 
     """
     def __init__(self, *args, **kwargs):
-        self.key                = "/romana/ipam/data"
-        self.connect_check_time = kwargs.pop('connect_check_time', 5)
-        self.etcd_timeout_time  = kwargs.pop('etcd_timeout_time', 2)
-        self.keep_running       = True
-        self.etcd               = None
+        self.key                  = "/romana/ipam/data"
+        self.connect_check_time   = kwargs.pop('connect_check_time', 5)
+        self.etcd_timeout_time    = kwargs.pop('etcd_timeout_time', 2)
+        self.keep_running         = True
+        self.etcd                 = None
+        self.etcd_latest_raw      = None
+        self.etcd_latest_raw_time = None
+        self.etcd_connect_time    = None
 
-        self.watch_id           = None  # used for etcd APIv3
-        self.watch_thread_v2    = None  # used for etcd APIv2
+        self.watch_id             = None  # used for etcd APIv3
+        self.watch_thread_v2      = None  # used for etcd APIv2
 
         super(Romana, self).__init__(*args, **kwargs)
 
@@ -52,6 +58,34 @@ class Romana(common.WatcherPlugin):
             self.v2 = True
         else:
             self.v2 = False
+
+    def get_plugin_name(self):
+        return "vpcrouter_romana_plugin.romana"
+
+    def get_info(self):
+        """
+        Return stats and information about the plugin.
+
+        """
+        return {
+            self.get_plugin_name() : {
+                "version" : self.get_version(),
+                "params" : {
+                    "etcd_addr"  : self.conf['etcd_addr'],
+                    "etcd_port"  : self.conf['etcd_port'],
+                    "ca_cert"    : self.conf['ca_cert'],
+                    "priv_key"   : self.conf['priv_key'],
+                    "cert_chain" : self.conf['cert_chain'],
+                },
+                "raw_topology" : {
+                    "time" : self.etcd_latest_raw_time,
+                    "data" : self.etcd_latest_raw
+                },
+                "stats" : {
+                    "etcd_connect_time" : self.etcd_connect_time
+                }
+            }
+        }
 
     def stop_watches(self):
         """
@@ -110,6 +144,9 @@ class Romana(common.WatcherPlugin):
             else:
                 data = self.etcd.get(self.key)[0]
             d = json.loads(data)
+            self.etcd_latest_raw      = d
+            self.etcd_latest_raw_time = datetime.datetime.now().isoformat()
+
             route_spec = {}
             # We have separate topology data for different networks
             for net_name, net_data in d['networks'].items():
@@ -220,6 +257,8 @@ class Romana(common.WatcherPlugin):
                                         cert_key=self.conf.get('priv_key'),
                                         cert_cert=self.conf.get('cert_chain'))
 
+                self.etcd_connect_time = datetime.datetime.now().isoformat()
+
                 logging.debug("Initial data read")
                 self.load_topology_send_route_spec()
 
@@ -290,6 +329,17 @@ class Romana(common.WatcherPlugin):
         self.keep_running = False
         self.observer_thread.join()
         logging.info("Romana watcher plugin: Stopped")
+
+    @classmethod
+    def get_version(self):
+        """
+        Return the version of the plugin.
+
+        Built-in plugins should return the string "built-in", while external
+        plugins should overwrite this and return their own version string.
+
+        """
+        return __version__
 
     @classmethod
     def add_arguments(cls, parser, sys_arg_list=None):
