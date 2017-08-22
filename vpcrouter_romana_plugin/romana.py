@@ -206,15 +206,15 @@ class Romana(common.WatcherPlugin):
                 if self.v2:
                     logging.debug("Attempting to connect to etcd (APIv2)")
                     self.etcd = etcd.client.Client(
-                                        host=self.conf['addr'],
-                                        port=int(self.conf['port']),
+                                        host=self.conf['etcd_addr'],
+                                        port=int(self.conf['etcd_port']),
                                         read_timeout=self.etcd_timeout_time)
 
                 else:
                     logging.debug("Attempting to connect to etcd (APIv3)")
                     self.etcd = etcd3.client(
-                                        host=self.conf['addr'],
-                                        port=int(self.conf['port']),
+                                        host=self.conf['etcd_addr'],
+                                        port=int(self.conf['etcd_port']),
                                         timeout=self.etcd_timeout_time,
                                         ca_cert=self.conf.get('ca_cert'),
                                         cert_key=self.conf.get('priv_key'),
@@ -297,11 +297,11 @@ class Romana(common.WatcherPlugin):
         Add arguments for the Romana mode to the argument parser.
 
         """
-        parser.add_argument('--etcd_addr', dest="addr",
+        parser.add_argument('--etcd_addr', dest="etcd_addr",
                             default="localhost",
                             help="etcd's address to connect to "
                                  "(only in Romana mode, default: localhost)")
-        parser.add_argument('--etcd_port', dest="port",
+        parser.add_argument('--etcd_port', dest="etcd_port",
                             default="2379", type=int,
                             help="etcd's port to connect to "
                                  "(only in Romana mode, default: 2379)")
@@ -320,7 +320,7 @@ class Romana(common.WatcherPlugin):
                             help="Filename of PEM encoded cert chain file "
                                  "(do not set for plain http connection "
                                  "to etcd)")
-        return ["addr", "port", "usev2",
+        return ["etcd_addr", "etcd_port", "usev2",
                 "ca_cert", "priv_key", "cert_chain"]
 
     @classmethod
@@ -329,15 +329,15 @@ class Romana(common.WatcherPlugin):
         Sanity check options needed for Romana mode.
 
         """
-        if 'port' not in conf:
+        if 'etcd_port' not in conf:
             raise ArgsError("The etcd port needs to be specified "
                             "(--etcd_port parameter)")
-        if 'addr' not in conf:
+        if 'etcd_addr' not in conf:
             raise ArgsError("The etcd address needs to be specified "
                             "(--etcd_addr parameter)")
-        if not 0 < conf['port'] < 65535:
+        if not 0 < conf['etcd_port'] < 65535:
             raise ArgsError("Invalid etcd port '%d' for Romana mode." %
-                            conf['port'])
+                            conf['etcd_port'])
         cert_args = [conf.get('ca_cert'), conf.get('priv_key'),
                      conf.get('cert_chain')]
         if any(cert_args):

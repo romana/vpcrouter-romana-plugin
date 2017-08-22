@@ -57,13 +57,13 @@ class TestPluginConf(TestPluginBase):
         }
         # Fail because of missing port
         self.assertRaises(ArgsError, Romana.check_arguments, conf)
-        conf['port'] = 0
+        conf['etcd_port'] = 0
         # Fail because of missing address
         self.assertRaises(ArgsError, Romana.check_arguments, conf)
-        conf['addr'] = "localhost"
+        conf['etcd_addr'] = "localhost"
         # Fail because of invalid port
         self.assertRaises(ArgsError, Romana.check_arguments, conf)
-        conf['port'] = 123
+        conf['etcd_port'] = 123
         Romana.check_arguments(conf)
         conf['ca_cert'] = "foo-cert"
         self.assertRaisesRegexp(ArgsError, 'Either set all SSL auth options',
@@ -78,8 +78,8 @@ class TestPluginConf(TestPluginBase):
     def test_run_no_connection(self):
         self.lc.clear()
         conf = {
-            "port" : 59999,
-            "addr" : "localhost"
+            "etcd_port" : 59999,
+            "etcd_addr" : "localhost"
         }
         plugin = Romana(conf, connect_check_time=0.5, etcd_timeout_time=0.5)
         plugin.start()
@@ -145,8 +145,8 @@ class TestPluginMockEtcd(TestPluginBase):
         etcd3.client = mock_client_func
 
         conf = {
-            "port" : 59999,
-            "addr" : "localhost"
+            "etcd_port" : 59999,
+            "etcd_addr" : "localhost"
         }
         for test_input, expected_route_spec in [
                 # Topology definition for simple, flat route spec
