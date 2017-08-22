@@ -15,26 +15,23 @@ limitations under the License.
 
 """
 
-import os
+from os import path
 
 from setuptools import setup, find_packages
-
+from codecs import open
 
 import vpcrouter_romana_plugin
 
 
-here = os.path.abspath(os.path.dirname(__file__))
+here = path.abspath(path.dirname(__file__))
 
 
-def get_readme():
-    try:
-        import pypandoc
-        return pypandoc.convert('README.md', 'rst')
-    except (IOError, ImportError):
-        return ""
-
-
-long_description = get_readme()
+try:
+    with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
+        long_description = f.read()
+except (IOError):
+    with open(path.join(here, 'README.md'), encoding='utf-8') as f:
+        long_description = f.read()
 
 
 setup(
@@ -51,10 +48,7 @@ setup(
     install_requires     = [
         'etcd3==0.6.2',
         'python-etcd==0.4.5',
-        'vpcrouter==1.6.2'
-    ],
-    dependency_links     = [
-        "https://github.com/romana/vpc-router/tarball/master#egg=vpcrouter-1.6.2"
+        'vpcrouter>=1.7.0'
     ],
     classifiers          = [
         'Programming Language :: Python',
