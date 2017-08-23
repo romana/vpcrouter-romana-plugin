@@ -48,7 +48,7 @@ setup(
     install_requires     = [
         'etcd3==0.6.2',
         'python-etcd==0.4.5',
-        'vpcrouter>=1.7.0'
+        'vpcrouter>=1.7.1'
     ],
     classifiers          = [
         'Programming Language :: Python',
