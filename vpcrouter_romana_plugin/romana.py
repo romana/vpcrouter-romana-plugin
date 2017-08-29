@@ -49,8 +49,9 @@ class Romana(common.WatcherPlugin):
         self.etcd_latest_raw_time = None
         self.etcd_connect_time    = None
 
-        self.watch_id             = None  # used for etcd APIv3
-        self.watch_thread_v2      = None  # used for etcd APIv2
+        self.watch_id             = None   # used for etcd APIv3
+        self.watch_thread_v2      = None   # used for etcd APIv2
+        self.watch_broken         = False
 
         super(Romana, self).__init__(*args, **kwargs)
 
@@ -186,12 +187,21 @@ class Romana(common.WatcherPlugin):
         thread.
 
         """
-        # By the time we get here, an update may have happened. So, get the
-        # latest index from the latest result and start our watch there,
-        # setting the value so that the first watch immediately returns and we
-        # can send a route spec update.
-        res        = self.etcd.get(self.key)
-        next_index = res.etcd_index   # First watch immediately finds this
+        try:
+            # By the time we get here, an update may have happened. So, get the
+            # latest index from the latest result and start our watch there,
+            # setting the value so that the first watch immediately returns and
+            # we can send a route spec update.
+            res        = self.etcd.get(self.key)
+            next_index = res.etcd_index   # First watch immediately finds this
+        except Exception as e:
+            # If the etcd isn't healthy, or our data isn't there, then we need
+            # to end this thread and try again. We use the watch_broken flag to
+            # indicate failure of this thread.
+            logging.warning("Romana watcher plugin: Cannot start watch loop: "
+                            "%s" % str(e))
+            self.watch_broken = True
+            return
 
         while True:
             try:
@@ -296,10 +306,12 @@ class Romana(common.WatcherPlugin):
         while self.keep_running:
             self.etcd = None
 
+            self.watch_broken = False
             self.establish_etcd_connection_and_watch()
 
             # Slowly loop as long as the connection status is fine.
-            while self.etcd_check_status() and self.keep_running:
+            while self.etcd_check_status() and self.keep_running \
+                                and not self.watch_broken:
                 time.sleep(self.connect_check_time)
 
             logging.warning("Romana watcher plugin: Lost etcd connection.")
