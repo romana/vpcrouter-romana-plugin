@@ -14,4 +14,4 @@ RUN apt-get update && apt-get -y upgrade && \
            /usr/share/doc/* /usr/share/bash-completion/* /usr/share/locale/* \
            /usr/include/* /usr/share/zoneinfo/* && \
     rm -rf /code/.git 
-ENTRYPOINT ["vpcrouter", "-l", "-", "-m", "vpcrouter_romana_plugin.romana"]
+ENTRYPOINT ["vpcrouter", "-l", "-", "-m", "vpcrouter_romana_plugin.romana", "--ignore_routes", "0.0.0.0/0"]
