@@ -47,8 +47,8 @@ setup(
     include_package_data = True,
     install_requires     = [
         'etcd3==0.6.2',
-        'python-etcd==0.4.5',
-        'vpcrouter>=1.8.3'
+        'romana-python-etcd==0.1.1',
+        'vpcrouter>=1.8.5'
     ],
     classifiers          = [
         'Programming Language :: Python',

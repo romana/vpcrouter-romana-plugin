@@ -187,35 +187,39 @@ class Romana(common.WatcherPlugin):
         thread.
 
         """
-        try:
-            # By the time we get here, an update may have happened. So, get the
-            # latest index from the latest result and start our watch there,
-            # setting the value so that the first watch immediately returns and
-            # we can send a route spec update.
-            res        = self.etcd.get(self.key)
-            next_index = res.etcd_index   # First watch immediately finds this
-        except Exception as e:
-            # If the etcd isn't healthy, or our data isn't there, then we need
-            # to end this thread and try again. We use the watch_broken flag to
-            # indicate failure of this thread.
-            logging.warning("Romana watcher plugin: Cannot start watch loop: "
-                            "%s" % str(e))
-            self.watch_broken = True
-            return
-
         while True:
             try:
+                # By the time we get here, an update may have happened. So, get
+                # the latest index from the latest result and start our watch
+                # there, setting the value so that the first watch immediately
+                # returns and we can send a route spec update.
+                res        = self.etcd.get(self.key)
+                # First watch immediately finds this
+                next_index = res.etcd_index
+            except Exception as e:
+                # If the etcd isn't healthy, or our data isn't there, then we
+                # need to end this thread and try again. We use the
+                # watch_broken flag to indicate failure of this thread.
+                logging.warning("Romana watcher plugin: Cannot start watch "
+                                "loop: %s" % str(e))
+                self.watch_broken = True
+                return
+
+            try:
                 watch_res = self.etcd.watch(self.key,
-                                            timeout=0,
+                                            timeout=60,
                                             index=next_index)
                 if watch_res:
                     next_index = watch_res.etcd_index + 1
                 self.load_topology_send_route_spec()
 
-            except:
-                # Something wrong? We'll attempt to re-establish the watch
-                # after a little wait.
-                time.sleep(2)
+            except Exception as e:
+                if hasattr(e, 'message') and e.message == "Just timed out":
+                    logging.debug("Scheduled watch re-establishment")
+                else:
+                    # Something wrong? We'll attempt to re-establish the watch
+                    # after a little wait.
+                    time.sleep(2)
 
     def etcd_check_status(self):
         """
